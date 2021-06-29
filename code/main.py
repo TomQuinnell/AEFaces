@@ -61,13 +61,14 @@ class FaceArea(Drawable):
 
 
 class Slider(Drawable):
-    def __init__(self, screen, rect):
+    def __init__(self, screen, rect, axis):
         super().__init__(screen, rect)
         self.val = 2 * np.random.random() - 1
-        self.range = 5
+        self.range = 1
         self.mid = (rect[0] + rect[2] / 2, rect[1] + rect[3] / 2)
         self.spacing = rect[3] / 8
         self.slider_height = 4
+        self.axis = axis
 
     def draw_bar(self, v, height):
         draw_rect(self.screen, [self.rect[0], self.mid[1] - height -
@@ -101,6 +102,12 @@ class SliderComposite:
         for slider in self.sliders:
             slider.click([int(mouse_pos[0]), int(mouse_pos[1])])
 
+    def sum(self):
+        sum = np.zeros(NUM_SLIDERS)
+        for slider in self.sliders:
+            sum += slider.axis * slider.val
+        return sum
+
 
 def mouse_in(mouse, rect):
     return mouse[0] in range(rect[0], rect[0] + rect[2]) and mouse[1] in range(rect[1], rect[1] + rect[3])
@@ -115,7 +122,7 @@ def draw_text(surface, x, y, text, color=BLACK):
     surface.blit(font.render(text, False, color), (x, y))
 
 
-def init_sliders(screen, rect):
+def init_sliders(screen, rect, axises):
     x, y, w, h = rect
     sliders_per_row = 2
     slider_width = w / sliders_per_row
@@ -124,7 +131,9 @@ def init_sliders(screen, rect):
     for i in range(NUM_SLIDERS):
         slider_x = x + (i % sliders_per_row) * slider_width
         slider_y = y + i // sliders_per_row * slider_height
-        sliders.append(Slider(screen, [int(slider_x), int(slider_y), int(slider_width - 3), int(slider_height - 3)]))
+        axis = axises[i]
+        sliders.append(Slider(screen, [int(slider_x), int(slider_y),
+                                       int(slider_width - 3), int(slider_height - 3)], axis))
     return sliders
 
 
@@ -132,9 +141,12 @@ def init_screen_components(screen):
     face_component = FaceArea(screen, [250, SPACING, 512, 512], img=[[BLUE, GREEN], [WHITE, RED], [RED, BLUE]], color=RED, width=3)
     label_component = Drawable(screen, [250, 512 + 2 * SPACING, 512, HEIGHT - 512 - 3 * SPACING], color=RED, width=3,
                                text="Some labels here")
-    #sliders_component = Drawable(screen, [SPACING, SPACING, 250 - 2 * SPACING, HEIGHT - 2 * SPACING], color=GREEN,
-    #                             width=3, text="Sliders go here")
-    sliders = init_sliders(screen, [SPACING, SPACING, 250 - 2 * SPACING, HEIGHT - 2 * SPACING])
+    axises = []
+    for i in range(NUM_SLIDERS):
+        axis = np.zeros(NUM_SLIDERS)
+        axis[i] = 1
+        axises.append(axis)
+    sliders = init_sliders(screen, [SPACING, SPACING, 250 - 2 * SPACING, HEIGHT - 2 * SPACING], axises)
     sliders_component = SliderComposite(sliders)
     buttons_component = Drawable(screen,
                                  [250 + 512 + SPACING, SPACING, WIDTH - 250 - 512 - 2 * SPACING, HEIGHT - 2 * SPACING],
@@ -159,8 +171,20 @@ def init_display():
     return screen, screen_components
 
 
+def load_eigen_stuff():
+    eigen_path = os.path.join(os.getcwd(), os.path.pardir, "resources", "eigens", "")
+    if os.path.exists(eigen_path):
+        eigenvalues = np.load(os.path.join(eigen_path, "eigenvalues.npy"))
+        eigenvectors = np.load(os.path.join(eigen_path, "eigenvectors.npy"))
+        eigenvectorInverses = np.linalg.pinv(eigenvectors)  # TODO why do I need this??
+    else:
+        raise RuntimeError
+    return eigenvalues, eigenvectors
+
+
 def main():
-    screen, screen_components = init_display()
+    eigenvalues, eigenvectors = load_eigen_stuff()
+    screen, screen_components = init_display(eigenvalues, eigenvectors)
     [face_component, label_component, sliders_component, buttons_component] = screen_components
     draw_face = True
     while True:  # main game loop
@@ -169,8 +193,8 @@ def main():
                 pygame.quit()
                 sys.exit()
         if draw_face:
+            vector = sliders_component.sum()
             face_component.draw()
-            print("Drew a face!!")
             draw_face = False
         if pygame.mouse.get_pressed(num_buttons=3)[0]:
             sliders_component.click(pygame.mouse.get_pos())
