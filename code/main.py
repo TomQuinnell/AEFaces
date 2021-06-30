@@ -2,7 +2,6 @@ import os
 import sys
 import time
 import numpy as np
-import tensorflow as tf
 from tensorflow import keras
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame
@@ -23,6 +22,7 @@ NN_DELAY = 0.1
 
 
 class Drawable:
+    """ Class to draw a box """
     def __init__(self, screen, rect, color=BLACK, width=3, text=None):
         self.screen = screen
         self.rect = rect
@@ -40,6 +40,7 @@ class Drawable:
 
 
 class FaceArea(Drawable):
+    """ The face drawing area """
     def __init__(self, screen, rect, img=None, color=BLACK, width=3):
         super().__init__(screen, rect, color, width)
         self.img = img
@@ -47,17 +48,6 @@ class FaceArea(Drawable):
     def set_img(self, img):
         self.img = img
 
-    """
-    def draw_image(self):
-        x, y, w, h = self.rect
-        shrink_factor = 1
-        box_width = w / IMG_SHAPE[0]
-        box_height = h / IMG_SHAPE[1]
-        for j, row in enumerate(self.img):
-            for i, col in enumerate(row):
-                if j % shrink_factor == 0 and i % shrink_factor == 0:
-                    draw_rect(self.screen, [x + i * box_width, y + j * box_height, box_width * shrink_factor, box_height * shrink_factor], col)
-    """
     def draw_image(self):
         image_surface = pygame.surfarray.make_surface(np.array(self.img))
         rotated = pygame.transform.rotate(image_surface, -90)
@@ -71,9 +61,11 @@ class FaceArea(Drawable):
 
 
 class Slider(Drawable):
+    """ A single slider """
     def __init__(self, screen, rect, axis, slider_range):
         super().__init__(screen, rect)
-        self.val = 2 * slider_range * np.random.random() - slider_range
+        # self.val = 2 * slider_range * np.random.random() - slider_range
+        self.val = 0
         self.range = slider_range
         self.mid = (rect[0] + rect[2] / 2, rect[1] + rect[3] / 2)
         self.spacing = rect[3] / 8
@@ -81,18 +73,21 @@ class Slider(Drawable):
         self.axis = axis
 
     def draw_bar(self, v, height):
+        """ draw a horizontal bar on the slider """
         draw_rect(self.screen, [self.rect[0], self.mid[1] - height -
                                 v / self.range * (self.rect[3] - self.spacing) / 2,
                                 self.rect[2], height])
 
     def draw(self):
-        draw_rect(self.screen, self.rect, GREEN)
-        draw_rect(self.screen, [self.mid[0], self.rect[1], 1, self.rect[3]])
-        self.draw_bar(self.val, height=self.slider_height)
-        self.draw_bar(self.range, height=1)
-        self.draw_bar(-self.range, height=1)
+        """ draw the slider """
+        draw_rect(self.screen, self.rect, GREEN)  # background
+        draw_rect(self.screen, [self.mid[0], self.rect[1], 1, self.rect[3]])  # middle vertical line
+        self.draw_bar(self.val, height=self.slider_height)  # current value
+        self.draw_bar(self.range, height=1)  # min
+        self.draw_bar(-self.range, height=1)  # max
 
     def click(self, mouse):
+        """ see (and return) if clicked, slide if so """
         if mouse_in(mouse, self.rect):
             self.val = - self.range * (mouse[1] - self.rect[1] - self.rect[3] / 2) / (self.rect[3] / 2 - self.spacing)
             self.val = self.range if self.val > self.range else self.val
@@ -103,6 +98,7 @@ class Slider(Drawable):
 
 
 class SliderComposite:
+    """ many sliders """
     def __init__(self, sliders):
         self.sliders = sliders
 
@@ -116,32 +112,36 @@ class SliderComposite:
             clicked = slider.click([int(mouse_pos[0]), int(mouse_pos[1])]) or clicked
         return clicked
 
-
     def sum(self, sum):
+        """ sum over slider values """
         for slider in self.sliders:
             sum += slider.axis * slider.val
         return sum
 
 
 def mouse_in(mouse, rect):
+    """ check if mouse position in rect """
     return mouse[0] in range(rect[0], rect[0] + rect[2]) and mouse[1] in range(rect[1], rect[1] + rect[3])
 
 
 def draw_rect(surface, rect, color=BLACK, width=0):
+    """ draw a rect on the surface """
     pygame.draw.rect(surface, color, rect, width)
 
 
 def draw_text(surface, x, y, text, color=BLACK):
+    """ draw text on the surface """
     font = pygame.font.SysFont('Arial', 30)
     surface.blit(font.render(text, False, color), (x, y))
 
 
 def init_sliders(screen, rect, axises, values):
+    """ generate sliders """
     x, y, w, h = rect
     sliders_per_row = 2
     slider_width = w / sliders_per_row
     slider_height = h / NUM_SLIDERS * sliders_per_row
-    slider_spacing = 5
+    slider_spacing = 5  # space between sliders
     sliders = []
     for i in range(NUM_SLIDERS):
         slider_x = x + (i % sliders_per_row) * slider_width
@@ -155,10 +155,13 @@ def init_sliders(screen, rect, axises, values):
 
 
 def init_screen_components(screen, eigenvalues, eigenvectors):
-    face_component = FaceArea(screen, [250, SPACING, 512, 512], img=[[BLUE, GREEN], [WHITE, RED], [RED, BLUE]], color=RED, width=3)
+    """ initialise components on screen """
+    face_component = FaceArea(screen, [250, SPACING, 512, 512], img=[[BLUE, GREEN], [WHITE, RED], [RED, BLUE]],
+                              color=RED, width=3)
     label_component = Drawable(screen, [250, 512 + 2 * SPACING, 512, HEIGHT - 512 - 3 * SPACING], color=RED, width=3,
                                text="Some labels here")
     if eigenvalues is None:
+        # use ijk axis
         axises = []
         values = []
         for i in range(NUM_SLIDERS):
@@ -167,6 +170,7 @@ def init_screen_components(screen, eigenvalues, eigenvectors):
             axises.append(axis)
             values.append(1)
     else:
+        # use eigenvectors as axis, with magnitudes of the eigenvalues
         axises = eigenvectors[:NUM_SLIDERS]
         values = eigenvalues[:NUM_SLIDERS]
     sliders = init_sliders(screen, [SPACING, SPACING, 250 - 2 * SPACING, HEIGHT - 2 * SPACING], axises, values)
@@ -179,28 +183,33 @@ def init_screen_components(screen, eigenvalues, eigenvectors):
 
 
 def draw_components(screen, components):
+    """ draw the components on the screen """
     screen.fill(WHITE)
     for component in components:
         component.draw()
 
 
 def init_display(eigenvalues, eigenvectors):
+    """ initialise the display """
     use_eigens = True
     pygame.init()
     pygame.font.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("Face Viewer")
-    screen_components = init_screen_components(screen, eigenvalues if use_eigens else None, eigenvectors if use_eigens else None)  # face, label, sliders, buttons
+    screen_components = init_screen_components(screen, eigenvalues if use_eigens else None,
+                                               eigenvectors if use_eigens else None)  # face, label, sliders, buttons
     draw_components(screen, screen_components)
     return screen, screen_components
 
 
 def load_eigen_stuff():
+    """ load eigenvalues, eigenvectors, and the latent vectors
+        saved in ./resources/{eigens,latents}/
+        precomputed by the .ipynb file """
     eigen_path = os.path.join(os.getcwd(), os.path.pardir, "resources", "eigens", "")
     if os.path.exists(eigen_path):
         eigenvalues = np.load(os.path.join(eigen_path, "eigenvalues.npy"))
         eigenvectors = np.load(os.path.join(eigen_path, "eigenvectors.npy"))
-        eigenvectorInverses = np.linalg.pinv(eigenvectors)  # TODO why do I need this??
     else:
         raise RuntimeError
     latents_path = os.path.join(os.getcwd(), os.pardir, "resources", "latents", "")
@@ -212,10 +221,14 @@ def load_eigen_stuff():
 
 
 def load_decoder():
+    """ load the trained decoder part of the autoencoder network
+        saved at ./resources/decoder/
+        pretrained in the .ipynb file """
     return keras.models.load_model(os.path.join(os.getcwd(), os.path.pardir, "resources", "decoder"))
 
 
 def main():
+    # setup
     decoder = load_decoder()
     eigenvalues, eigenvectors, latents_128k = load_eigen_stuff()
     mean_latent = np.mean(latents_128k, axis=0)
@@ -223,20 +236,32 @@ def main():
     [face_component, label_component, sliders_component, buttons_component] = screen_components
     draw_face = True
     last_draw = 0
-    while True:  # main game loop
+
+    # 'game' loop
+    while True:
+        # event handling
         for event in pygame.event.get():
             if event.type == QUIT:
                 pygame.quit()
                 sys.exit()
+        # drawing a new face
         if draw_face and time.time() - last_draw > NN_DELAY:
+            # forward multiply vector from slider values
             vector = sliders_component.sum(mean_latent.copy())
             img = decoder(np.array([vector]))[0]
+
+            # draw on screen
             img = img * 255
             face_component.set_img(img)
             face_component.draw()
+
+            # reset for next time
             draw_face = False
             last_draw = time.time()
+
+        # mouse press check
         elif pygame.mouse.get_pressed(num_buttons=3)[0]:
+            # sliders
             slider_clicked = sliders_component.click(pygame.mouse.get_pos())
             if slider_clicked:
                 sliders_component.draw()
