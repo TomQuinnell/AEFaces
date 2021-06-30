@@ -15,6 +15,7 @@ HEIGHT = 700
 SPACING = 10
 IMG_SHAPE = (128, 128, 3)
 NUM_SLIDERS = 20
+LATENT_SIZE = 200
 
 
 class Drawable:
@@ -61,10 +62,10 @@ class FaceArea(Drawable):
 
 
 class Slider(Drawable):
-    def __init__(self, screen, rect, axis):
+    def __init__(self, screen, rect, axis, slider_range):
         super().__init__(screen, rect)
-        self.val = 2 * np.random.random() - 1
-        self.range = 1
+        self.val = 0
+        self.range = slider_range
         self.mid = (rect[0] + rect[2] / 2, rect[1] + rect[3] / 2)
         self.spacing = rect[3] / 8
         self.slider_height = 4
@@ -103,7 +104,7 @@ class SliderComposite:
             slider.click([int(mouse_pos[0]), int(mouse_pos[1])])
 
     def sum(self):
-        sum = np.zeros(NUM_SLIDERS)
+        sum = np.zeros(LATENT_SIZE)
         for slider in self.sliders:
             sum += slider.axis * slider.val
         return sum
@@ -122,7 +123,7 @@ def draw_text(surface, x, y, text, color=BLACK):
     surface.blit(font.render(text, False, color), (x, y))
 
 
-def init_sliders(screen, rect, axises):
+def init_sliders(screen, rect, axises, values):
     x, y, w, h = rect
     sliders_per_row = 2
     slider_width = w / sliders_per_row
@@ -132,21 +133,28 @@ def init_sliders(screen, rect, axises):
         slider_x = x + (i % sliders_per_row) * slider_width
         slider_y = y + i // sliders_per_row * slider_height
         axis = axises[i]
+        slider_range = values[i] / 2
         sliders.append(Slider(screen, [int(slider_x), int(slider_y),
-                                       int(slider_width - 3), int(slider_height - 3)], axis))
+                                       int(slider_width - 3), int(slider_height - 3)], axis, slider_range))
     return sliders
 
 
-def init_screen_components(screen):
+def init_screen_components(screen, eigenvalues, eigenvectors):
     face_component = FaceArea(screen, [250, SPACING, 512, 512], img=[[BLUE, GREEN], [WHITE, RED], [RED, BLUE]], color=RED, width=3)
     label_component = Drawable(screen, [250, 512 + 2 * SPACING, 512, HEIGHT - 512 - 3 * SPACING], color=RED, width=3,
                                text="Some labels here")
-    axises = []
-    for i in range(NUM_SLIDERS):
-        axis = np.zeros(NUM_SLIDERS)
-        axis[i] = 1
-        axises.append(axis)
-    sliders = init_sliders(screen, [SPACING, SPACING, 250 - 2 * SPACING, HEIGHT - 2 * SPACING], axises)
+    if eigenvalues is None:
+        axises = []
+        values = []
+        for i in range(NUM_SLIDERS):
+            axis = np.zeros(LATENT_SIZE)
+            axis[i] = 1
+            axises.append(axis)
+            values.append(1)
+    else:
+        axises = eigenvectors[:NUM_SLIDERS]
+        values = eigenvalues[:NUM_SLIDERS]
+    sliders = init_sliders(screen, [SPACING, SPACING, 250 - 2 * SPACING, HEIGHT - 2 * SPACING], axises, values)
     sliders_component = SliderComposite(sliders)
     buttons_component = Drawable(screen,
                                  [250 + 512 + SPACING, SPACING, WIDTH - 250 - 512 - 2 * SPACING, HEIGHT - 2 * SPACING],
@@ -161,12 +169,13 @@ def draw_components(screen, components):
         component.draw()
 
 
-def init_display():
+def init_display(eigenvalues, eigenvectors):
+    use_eigens = True
     pygame.init()
     pygame.font.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("Face Viewer")
-    screen_components = init_screen_components(screen)  # face, label, sliders, buttons
+    screen_components = init_screen_components(screen, eigenvalues if use_eigens else None, eigenvectors if use_eigens else None)  # face, label, sliders, buttons
     draw_components(screen, screen_components)
     return screen, screen_components
 
