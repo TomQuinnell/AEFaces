@@ -1,2 +1,1 @@
-This project will train an Autoencoder neural network to learnt the latent space representation of faces, and will have an interactive tool with sliders to adjust facial features.
-I might use PCA to make these features 'independent'
+I have trained an Autoencoder neural network to learnt the latent space representation of faces, and have used PCA to find the 'axis' on which noticable features lie. I used these in an interactive tool in Pygame with sliders to adjust these facial features.
