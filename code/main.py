@@ -147,7 +147,7 @@ def init_sliders(screen, rect, axises, values):
         slider_x = x + (i % sliders_per_row) * slider_width
         slider_y = y + i // sliders_per_row * slider_height
         axis = axises[i]
-        slider_range = values[i] / 2
+        slider_range = values[i]
         sliders.append(Slider(screen, [int(slider_x), int(slider_y),
                                        int(slider_width - slider_spacing), int(slider_height - slider_spacing)],
                               axis, slider_range))
