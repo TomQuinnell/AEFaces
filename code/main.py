@@ -1,6 +1,9 @@
 import os
 import sys
+import time
 import numpy as np
+import tensorflow as tf
+from tensorflow import keras
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame
 from pygame.locals import *
@@ -16,6 +19,7 @@ SPACING = 10
 IMG_SHAPE = (128, 128, 3)
 NUM_SLIDERS = 20
 LATENT_SIZE = 200
+NN_DELAY = 0.1
 
 
 class Drawable:
@@ -43,17 +47,22 @@ class FaceArea(Drawable):
     def set_img(self, img):
         self.img = img
 
+    """
     def draw_image(self):
         x, y, w, h = self.rect
-        x += 2
-        y += 2
-        w -= 4
-        h -= 4
+        shrink_factor = 1
         box_width = w / IMG_SHAPE[0]
         box_height = h / IMG_SHAPE[1]
         for j, row in enumerate(self.img):
             for i, col in enumerate(row):
-                draw_rect(self.screen, [x + i * box_width, y + j * box_height, box_width, box_height], col)
+                if j % shrink_factor == 0 and i % shrink_factor == 0:
+                    draw_rect(self.screen, [x + i * box_width, y + j * box_height, box_width * shrink_factor, box_height * shrink_factor], col)
+    """
+    def draw_image(self):
+        image_surface = pygame.surfarray.make_surface(np.array(self.img))
+        rotated = pygame.transform.rotate(image_surface, -90)
+        bigger = pygame.transform.scale(rotated, (self.rect[2], self.rect[3]))
+        self.screen.blit(bigger, (self.rect[0], self.rect[1]))
 
     def draw(self):
         self.draw_rect()
@@ -64,7 +73,7 @@ class FaceArea(Drawable):
 class Slider(Drawable):
     def __init__(self, screen, rect, axis, slider_range):
         super().__init__(screen, rect)
-        self.val = 0
+        self.val = 2 * slider_range * np.random.random() - slider_range
         self.range = slider_range
         self.mid = (rect[0] + rect[2] / 2, rect[1] + rect[3] / 2)
         self.spacing = rect[3] / 8
@@ -89,6 +98,8 @@ class Slider(Drawable):
             self.val = self.range if self.val > self.range else self.val
             self.val = - self.range if self.val < - self.range else self.val
             self.draw()
+            return True
+        return False
 
 
 class SliderComposite:
@@ -100,11 +111,13 @@ class SliderComposite:
             slider.draw()
 
     def click(self, mouse_pos):
+        clicked = False
         for slider in self.sliders:
-            slider.click([int(mouse_pos[0]), int(mouse_pos[1])])
+            clicked = slider.click([int(mouse_pos[0]), int(mouse_pos[1])]) or clicked
+        return clicked
 
-    def sum(self):
-        sum = np.zeros(LATENT_SIZE)
+
+    def sum(self, sum):
         for slider in self.sliders:
             sum += slider.axis * slider.val
         return sum
@@ -128,6 +141,7 @@ def init_sliders(screen, rect, axises, values):
     sliders_per_row = 2
     slider_width = w / sliders_per_row
     slider_height = h / NUM_SLIDERS * sliders_per_row
+    slider_spacing = 5
     sliders = []
     for i in range(NUM_SLIDERS):
         slider_x = x + (i % sliders_per_row) * slider_width
@@ -135,7 +149,8 @@ def init_sliders(screen, rect, axises, values):
         axis = axises[i]
         slider_range = values[i] / 2
         sliders.append(Slider(screen, [int(slider_x), int(slider_y),
-                                       int(slider_width - 3), int(slider_height - 3)], axis, slider_range))
+                                       int(slider_width - slider_spacing), int(slider_height - slider_spacing)],
+                              axis, slider_range))
     return sliders
 
 
@@ -188,27 +203,44 @@ def load_eigen_stuff():
         eigenvectorInverses = np.linalg.pinv(eigenvectors)  # TODO why do I need this??
     else:
         raise RuntimeError
-    return eigenvalues, eigenvectors
+    latents_path = os.path.join(os.getcwd(), os.pardir, "resources", "latents", "")
+    if os.path.exists(eigen_path):
+        latents = np.load(os.path.join(latents_path, "latents_128k.npy"))
+    else:
+        raise RuntimeError
+    return eigenvalues, eigenvectors, latents
+
+
+def load_decoder():
+    return keras.models.load_model(os.path.join(os.getcwd(), os.path.pardir, "resources", "decoder"))
 
 
 def main():
-    eigenvalues, eigenvectors = load_eigen_stuff()
+    decoder = load_decoder()
+    eigenvalues, eigenvectors, latents_128k = load_eigen_stuff()
+    mean_latent = np.mean(latents_128k, axis=0)
     screen, screen_components = init_display(eigenvalues, eigenvectors)
     [face_component, label_component, sliders_component, buttons_component] = screen_components
     draw_face = True
+    last_draw = 0
     while True:  # main game loop
         for event in pygame.event.get():
             if event.type == QUIT:
                 pygame.quit()
                 sys.exit()
-        if draw_face:
-            vector = sliders_component.sum()
+        if draw_face and time.time() - last_draw > NN_DELAY:
+            vector = sliders_component.sum(mean_latent.copy())
+            img = decoder(np.array([vector]))[0]
+            img = img * 255
+            face_component.set_img(img)
             face_component.draw()
             draw_face = False
-        if pygame.mouse.get_pressed(num_buttons=3)[0]:
-            sliders_component.click(pygame.mouse.get_pos())
-            sliders_component.draw()
-            draw_face = True
+            last_draw = time.time()
+        elif pygame.mouse.get_pressed(num_buttons=3)[0]:
+            slider_clicked = sliders_component.click(pygame.mouse.get_pos())
+            if slider_clicked:
+                sliders_component.draw()
+                draw_face = True
 
         pygame.display.update()
 
