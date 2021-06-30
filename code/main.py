@@ -12,9 +12,9 @@ WHITE = (255, 255, 255)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
-WIDTH = 1000
-HEIGHT = 700
 SPACING = 10
+WIDTH = 250 + 512 + SPACING
+HEIGHT = 700
 IMG_SHAPE = (128, 128, 3)
 NUM_SLIDERS = 20
 LATENT_SIZE = 200
@@ -96,6 +96,10 @@ class Slider(Drawable):
             return True
         return False
 
+    def set_val(self, v):
+        self.val = v
+        self.draw()
+
 
 class SliderComposite:
     """ many sliders """
@@ -117,6 +121,41 @@ class SliderComposite:
         for slider in self.sliders:
             sum += slider.axis * slider.val
         return sum
+
+    def set_vals(self, vals):
+        for i, v in enumerate(vals):
+            self.sliders[i].set_val(v)
+
+
+class Button(Drawable):
+    def __init__(self, screen, rect, label):
+        rect = [int(v) for v in rect]
+        super().__init__(screen, rect)
+        self.rect[2] -= 3
+        self.rect[3] -= 3
+        self.label = label
+
+    def draw(self):
+        draw_rect(self.screen, self.rect, RED)
+        draw_text(self.screen, self.rect[0], self.rect[1], self.label)
+
+    def click(self, mouse):
+        """ return if clicked """
+        return mouse_in(mouse, self.rect)
+
+
+class ButtonComposite:
+    def __init__(self, buttons):
+        self.buttons = buttons
+
+    def click(self, mouse_pos):
+        for button in self.buttons:
+            if button.click(mouse_pos):
+                return button
+
+    def draw(self):
+        for button in self.buttons:
+            button.draw()
 
 
 def mouse_in(mouse, rect):
@@ -158,8 +197,12 @@ def init_screen_components(screen, eigenvalues, eigenvectors):
     """ initialise components on screen """
     face_component = FaceArea(screen, [250, SPACING, 512, 512], img=[[BLUE, GREEN], [WHITE, RED], [RED, BLUE]],
                               color=RED, width=3)
-    label_component = Drawable(screen, [250, 512 + 2 * SPACING, 512, HEIGHT - 512 - 3 * SPACING], color=RED, width=3,
-                               text="Some labels here")
+    buttons = [
+        Button(screen, [250, 512 + 2 * SPACING, 512 / 3, HEIGHT - 512 - 3 * SPACING], "Mean"),
+        Button(screen, [250 + 512 / 3, 512 + 2 * SPACING, 512 / 3, HEIGHT - 512 - 3 * SPACING], "Random"),
+        Button(screen, [250 + 2 * 512 / 3, 512 + 2 * SPACING, 512 / 3, HEIGHT - 512 - 3 * SPACING], "Quit")
+    ]
+    button_component = ButtonComposite(buttons)
     if eigenvalues is None:
         # use ijk axis
         axises = []
@@ -175,11 +218,8 @@ def init_screen_components(screen, eigenvalues, eigenvectors):
         values = eigenvalues[:NUM_SLIDERS]
     sliders = init_sliders(screen, [SPACING, SPACING, 250 - 2 * SPACING, HEIGHT - 2 * SPACING], axises, values)
     sliders_component = SliderComposite(sliders)
-    buttons_component = Drawable(screen,
-                                 [250 + 512 + SPACING, SPACING, WIDTH - 250 - 512 - 2 * SPACING, HEIGHT - 2 * SPACING],
-                                 color=BLUE, width=3, text="Buttons")
 
-    return [face_component, label_component, sliders_component, buttons_component]
+    return [face_component, button_component, sliders_component]
 
 
 def draw_components(screen, components):
@@ -197,7 +237,7 @@ def init_display(eigenvalues, eigenvectors):
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("Face Viewer")
     screen_components = init_screen_components(screen, eigenvalues if use_eigens else None,
-                                               eigenvectors if use_eigens else None)  # face, label, sliders, buttons
+                                               eigenvectors if use_eigens else None)  # face, buttons, sliders
     draw_components(screen, screen_components)
     return screen, screen_components
 
@@ -227,13 +267,17 @@ def load_decoder():
     return keras.models.load_model(os.path.join(os.getcwd(), os.path.pardir, "resources", "decoder"))
 
 
+def gen_random_vals(num_sliders, values):
+    return [2 * values[i] * np.random.random() - values[i] for i in range(num_sliders)]
+
+
 def main():
     # setup
     decoder = load_decoder()
     eigenvalues, eigenvectors, latents_128k = load_eigen_stuff()
     mean_latent = np.mean(latents_128k, axis=0)
     screen, screen_components = init_display(eigenvalues, eigenvectors)
-    [face_component, label_component, sliders_component, buttons_component] = screen_components
+    [face_component, button_component, sliders_component] = screen_components
     draw_face = True
     last_draw = 0
 
@@ -262,10 +306,24 @@ def main():
         # mouse press check
         elif pygame.mouse.get_pressed(num_buttons=3)[0]:
             # sliders
-            slider_clicked = sliders_component.click(pygame.mouse.get_pos())
-            if slider_clicked:
+            is_slider_clicked = sliders_component.click(pygame.mouse.get_pos())
+            if is_slider_clicked:
                 sliders_component.draw()
                 draw_face = True
+            else:
+                # buttons
+                button_clicked = button_component.click(pygame.mouse.get_pos())
+                if button_clicked is None:
+                    pass
+                elif button_clicked.label == "Mean":
+                    sliders_component.set_vals(np.zeros(NUM_SLIDERS))
+                    draw_face = True
+                elif button_clicked.label == "Random":
+                    sliders_component.set_vals(gen_random_vals(NUM_SLIDERS, eigenvalues))
+                    draw_face = True
+                elif button_clicked.label == "Quit":
+                    pygame.quit()
+                    sys.exit()
 
         pygame.display.update()
 
