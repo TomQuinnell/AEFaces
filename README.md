@@ -1,1 +1,1 @@
-I have trained an Autoencoder neural network to learnt the latent space representation of faces, and have used PCA to find the 'axis' on which noticable features lie. I used these in an interactive tool in Pygame with sliders to adjust these facial features.
+I have trained an Autoencoder neural network to learnt the latent space representation of faces, and have used PCA to find the 'axis' on which noticable features lie. I used these in an interactive tool in Pygame with sliders to adjust these facial features along these axes.
