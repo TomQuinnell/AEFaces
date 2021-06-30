@@ -137,7 +137,7 @@ class Button(Drawable):
 
     def draw(self):
         draw_rect(self.screen, self.rect, RED)
-        draw_text(self.screen, self.rect[0], self.rect[1], self.label)
+        draw_text(self.screen, self.rect[0] + 15, self.rect[1] + 40, self.label)
 
     def click(self, mouse):
         """ return if clicked """
@@ -170,7 +170,7 @@ def draw_rect(surface, rect, color=BLACK, width=0):
 
 def draw_text(surface, x, y, text, color=BLACK):
     """ draw text on the surface """
-    font = pygame.font.SysFont('Arial', 30)
+    font = pygame.font.SysFont('Arial', 40)
     surface.blit(font.render(text, False, color), (x, y))
 
 
